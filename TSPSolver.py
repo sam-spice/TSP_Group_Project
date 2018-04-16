@@ -26,6 +26,7 @@ class TSPSolver:
         self.number_pruned = 0
         self.max_states = 0
         self.bssf_updates = 0
+        self.state_created = 0
 
     def setupWithScenario( self, scenario ):
         self._scenario = scenario
@@ -37,10 +38,10 @@ class TSPSolver:
         </summary>
         <returns>results array for GUI that contains three ints: cost of solution, time spent to find solution, number of solutions found during search (
 not counting initial BSSF estimate)</returns> '''
-    def defaultRandomTour( self, start_time, time_allowance=60.0 ):
+
+    def defaultRandomTour(self, start_time, time_allowance=60.0):
 
         results = {}
-
 
         start_time = time.time()
 
@@ -49,47 +50,132 @@ not counting initial BSSF estimate)</returns> '''
         foundTour = False
         count = 0
         while not foundTour:
-            # create a random permutation
-            perm = np.random.permutation( ncities )
 
-            #for i in range( ncities ):
-                #swap = i
-                #while swap == i:
-                    #swap = np.random.randint(ncities)
-                #temp = perm[i]
-                #perm[i] = perm[swap]
-                #perm[swap] = temp
+            if time.time() > (start_time + time_allowance):
+                results['cost'] = np.inf
+                results['soln'] = None
+                results['count'] = 0
+                results['time'] = time.time() - start_time
+                return
+
+            # create a random permutation
+            perm = np.random.permutation(ncities)
+            to_visit = np.ones(ncities)
+            # perm = np.arange(ncities)
+
+            # print('\n\nNEW PERMUTATION: {}'.format(perm))
+            failed = False
+            for i in range(ncities):
+                # print('In city {}'.format(i))
+                src = perm[i]
+                dest = perm[(i + 1) % ncities]
+                if self._scenario._edge_exists[src, dest]:
+                    to_visit[dest] = False
+                    continue
+                elif i + 1 == ncities:
+                    # print('CAN\'T GET BACK TO START!')
+                    failed = True  # can't get back to start so try a new permutation
+                    break
+
+                else:  # try to swap the destination with a reachable one
+                    # print('EDGE {}-->{} DOESN\'T EXIST'.format(src,dest))
+                    reachable = np.nonzero(self._scenario._edge_exists[src, :] * to_visit)[0]
+                    # print(reachable)
+                    if np.sum(reachable > 0) == 0:
+                        # print('DEAD END')
+                        failed = True  # can't get back to start so try a new permutation
+                        break
+                    swapind = reachable[np.random.randint(np.sum(reachable > 0))]
+                    # print('BEFORE: {}'.format(perm))
+                    perm_loc_of_swapind = np.nonzero(perm == swapind)
+                    perm[(i + 1) % ncities] = perm[perm_loc_of_swapind]
+                    perm[perm_loc_of_swapind] = dest
+                    to_visit[swapind] = False
+                    # to_visit[swapind] = False
+                    # print('AFTER: {}'.format(perm))
+                    # print('REACHABLE: {}, picked {}'.format(reachable,swapind))
+
+            if failed:
+                # print('Trying a new permutation')
+                continue  # try a new permutation
 
             route = []
 
             # Now build the route using the random permutation
-            for i in range( ncities ):
-                route.append( cities[ perm[i] ] )
+            for i in range(ncities):
+                route.append(cities[perm[i]])
 
             bssf = TSPSolution(route)
-            #bssf_cost = bssf.cost()
-            #count++;
+            # bssf_cost = bssf.cost()
+            # count++;
             count += 1
 
-            #if costOfBssf() < float('inf'):
+            # if costOfBssf() < float('inf'):
             if bssf.costOfRoute() < np.inf:
                 # Found a valid route
                 foundTour = True
-        #} while (costOfBssf() == double.PositiveInfinity);                // until a valid route is found
-        #timer.Stop();
+        # } while (costOfBssf() == double.PositiveInfinity);                // until a valid route is found
+        # timer.Stop();
 
-        results['cost'] = bssf.costOfRoute() #costOfBssf().ToString();                          // load results array
+        results['cost'] = bssf.costOfRoute()  # costOfBssf().ToString();                          // load results array
         results['time'] = time.time() - start_time
         results['count'] = count
         results['soln'] = bssf
 
-       # return results;
+        # return results;
         return results
+
+    def greedy_setup(self):
+        cities_list = copy.deepcopy(self._scenario.getCities())
+        return cities_list
+
+
+    def greedy_round(self, cities, start_city_idx):
+        start_city = cities[start_city_idx]
+        cities.remove(start_city)
+        bssf_route = list()
+        bssf_route.append(start_city)
+        curr_city = start_city
+
+        while(len(cities) > 0):
+            min_dist = math.inf
+            min_city = None
+            for city in cities:
+                if curr_city.costTo(city) <= min_dist:
+                    min_dist = curr_city.costTo(city)
+                    min_city = city
+            bssf_route.append(min_city)
+            cities.remove(min_city)
+            curr_city = min_city
+        #bssf_route.append(start_city)
+        bssf = TSPSolution(bssf_route)
+        return bssf
+
+
 
 
 
     def greedy( self, start_time, time_allowance=60.0 ):
-        pass
+        bssf_cost = math.inf
+        bssf = None
+        count = 0
+        cities_list = self.greedy_setup()
+        for i in range(len(cities_list)):
+            bssf_result = self.greedy_round(copy.deepcopy(cities_list),i)
+            cost_of_route = bssf_result.costOfRoute()
+            if bssf_result.costOfRoute() < bssf_cost:
+                bssf_cost = bssf_result.costOfRoute()
+                bssf = bssf_result
+                count += 1
+        results = dict()
+        results['cost'] = bssf.costOfRoute()  # costOfBssf().ToString();                          // load results array
+        results['time'] = time.time() - start_time
+        results['count'] = count
+        results['soln'] = bssf
+        return results
+
+
+
 
     # function called to set up the initial state array
     # time: O(n^2)
@@ -99,6 +185,7 @@ not counting initial BSSF estimate)</returns> '''
         self.max_states = 0
         self.number_pruned = 0
         self.bssf_updates = 0
+        self.state_created = 0
 
         # get the list of cities and create the n x n array
         # time: O(n^2)
@@ -164,7 +251,7 @@ not counting initial BSSF estimate)</returns> '''
             # checks to see if the current city is out of bounds, should never happen but never hurts to check
             if state.current_city >= len(state.cities_array):
                 continue
-
+            self.state_created += 1
             # checks to see if the cost of the transfer + the current cost exceeds the BSSF, if it does prune it yo!
             cost = state.cities_array[state.current_city][i]
             if cost + state.cost > self.best_path_cost:
@@ -262,12 +349,13 @@ not counting initial BSSF estimate)</returns> '''
             to_add.current_city = i
             to_add.visited.append(to_add.cities_array[i][0])
             pq.append(to_add)
+            self.state_created += 1
         # time: O(n) I am gonna assume they do it in linear time because the python peeps a smart!
         heapq.heapify(pq)
 
         # run the reduction loop until the
         # time: O(n! * n^3) there are n! possible combos, as such it will take that many permutations * worst case time
-        # space: O(n! * n^3) same as time but for space
+        # space: O(n! * n^2) max number of combos * size of states
         while pq.__len__() > 0:
             # pop next item off the queue
             # time: O(logn)
@@ -316,6 +404,8 @@ not counting initial BSSF estimate)</returns> '''
         print('Max stored states: ' + str(self.max_states))
         print('pruned states: ' + str(self.number_pruned))
         print('bssf updates: ' + str(self.bssf_updates))
+        print('total states created ' +  str(self.state_created)+'\n\n')
+
         return results
 
     def fancy(self, start_time, time_allowance=60.0):
@@ -326,7 +416,6 @@ class BBstate:
     def __init__(self):
         self.cities_array = []
         self.visited = []
-        self.route = []
         self.cost = 0
         self.number_of_rounds = 0
         self.current_city = None
