@@ -151,11 +151,8 @@ not counting initial BSSF estimate)</returns> '''
         bssf = TSPSolution(bssf_route)
         return bssf
 
-
-
-
-
     def greedy( self, start_time, time_allowance=60.0 ):
+        t_1 = time.time()
         bssf_cost = math.inf
         bssf = None
         count = 0
@@ -167,9 +164,12 @@ not counting initial BSSF estimate)</returns> '''
                 bssf_cost = bssf_result.costOfRoute()
                 bssf = bssf_result
                 count += 1
+            if time.time() - t_1 > time_allowance:
+                break
+        t_2 = time.time()
         results = dict()
         results['cost'] = bssf.costOfRoute()  # costOfBssf().ToString();                          // load results array
-        results['time'] = time.time() - start_time
+        results['time'] = t_2 - t_1
         results['count'] = count
         results['soln'] = bssf
         return results
